@@ -388,6 +388,11 @@ void RIL_setRilSocketName(const char * s) {
     strncpy(rild, s, MAX_SOCKET_NAME_LENGTH);
 }
 
+extern "C"
+void RIL_setMaxNumClients(int num_clients) {
+    int s_maxNumClients = num_clients;
+}
+
 static char *
 strdupReadString(Parcel &p) {
     size_t stringlen;
