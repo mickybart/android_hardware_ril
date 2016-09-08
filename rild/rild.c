@@ -50,7 +50,7 @@ static void usage(const char *argv0) {
 
 extern char rild[MAX_SOCKET_NAME_LENGTH];
 
-extern void RIL_register (const RIL_RadioFunctions *callbacks);
+extern void RIL_register (const RIL_RadioFunctions *callbacks, int client_id);
 
 extern void RIL_register_socket (RIL_RadioFunctions *(*rilUimInit)
         (const struct RIL_Env *, int, char **), RIL_SOCKET_TYPE socketType, int argc, char **argv);
@@ -71,6 +71,7 @@ extern void RIL_onUnsolicitedResponse(int unsolResponse, const void *data,
 extern void RIL_requestTimedCallback (RIL_TimedCallback callback,
         void *param, const struct timeval *relativeTime);
 
+extern void RIL_setMaxNumClients(int num_clients);
 
 static struct RIL_Env s_rilEnv = {
     RIL_onRequestComplete,
@@ -139,6 +140,7 @@ void switchUser() {
 int main(int argc, char **argv) {
     const char * rilLibPath = NULL;
     char **rilArgv;
+    static char * s_argv[MAX_LIB_ARGS];
     void *dlHandle;
     const RIL_RadioFunctions *(*rilInit)(const struct RIL_Env *, int, char **);
     const RIL_RadioFunctions *(*rilUimInit)(const struct RIL_Env *, int, char **);
@@ -176,9 +178,13 @@ int main(int argc, char **argv) {
         RLOGE("Max Number of rild's supported is: %d", MAX_RILDS);
         exit(0);
     }
+
+    /*
     if (strncmp(clientId, "0", MAX_CLIENT_ID_LENGTH)) {
         RIL_setRilSocketName(strncat(rild, clientId, MAX_SOCKET_NAME_LENGTH));
     }
+    */
+    RIL_setRilSocketName("rild");
 
     if (rilLibPath == NULL) {
         if ( 0 == property_get(LIB_PATH_PROPERTY, libPath, NULL)) {
@@ -193,7 +199,6 @@ int main(int argc, char **argv) {
     /* special override when in the emulator */
 #if 1
     {
-        static char*  arg_overrides[5];
         static char   arg_device[32];
         int           done = 0;
 
@@ -245,9 +250,10 @@ int main(int argc, char **argv) {
                     snprintf( arg_device, sizeof(arg_device), "%s/%s",
                                 ANDROID_SOCKET_DIR, QEMUD_SOCKET_NAME );
 
-                    arg_overrides[1] = "-s";
-                    arg_overrides[2] = arg_device;
-                    done = 1;
+                    memset(s_argv, 0, sizeof(s_argv));
+                    s_argv[1] = "-s";
+                    s_argv[2] = arg_device;
+		    done = 1;
                     break;
                 }
                 RLOGD("could not connect to %s socket: %s",
@@ -279,20 +285,20 @@ int main(int argc, char **argv) {
 
             snprintf( arg_device, sizeof(arg_device), DEV_PREFIX "%s", p );
             arg_device[sizeof(arg_device)-1] = 0;
-            arg_overrides[1] = "-d";
-            arg_overrides[2] = arg_device;
+	    memset(s_argv, 0, sizeof(s_argv));
+            s_argv[1] = "-d";
+            s_argv[2] = arg_device;
             done = 1;
 
         } while (0);
 
         if (done) {
-            argv = arg_overrides;
             argc = 3;
             i    = 1;
             hasLibArgs = 1;
             rilLibPath = REFERENCE_RIL_PATH;
 
-            RLOGD("overriding with %s %s", arg_overrides[1], arg_overrides[2]);
+            RLOGD("overriding with %s %s", s_argv[1], s_argv[2]);
         }
     }
 OpenLib:
@@ -329,36 +335,38 @@ OpenLib:
     }
 
     if (hasLibArgs) {
-        rilArgv = argv + i - 1;
         argc = argc -i + 1;
     } else {
         static char * newArgv[MAX_LIB_ARGS];
         static char args[PROPERTY_VALUE_MAX];
-        rilArgv = newArgv;
         property_get(LIB_ARGS_PROPERTY, args, "");
-        argc = make_argv(args, rilArgv);
+        argc = make_argv(args, s_argv);
     }
 
-    rilArgv[argc++] = "-c";
-    rilArgv[argc++] = clientId;
-    RLOGD("RIL_Init argc = %d clientId = %s", argc, rilArgv[argc-1]);
+    s_argv[argc++] = "-c";
+    s_argv[argc++] = clientId;
+    RLOGD("RIL_Init argc = %d clientId = %s", argc, s_argv[argc-1]);
 
     // Make sure there's a reasonable argv[0]
-    rilArgv[0] = argv[0];
+    s_argv[0] = argv[0];
 
-    funcs = rilInit(&s_rilEnv, argc, rilArgv);
+    funcs = rilInit(&s_rilEnv, argc, s_argv);
     RLOGD("RIL_Init rilInit completed");
 
-    RIL_register(funcs);
+    RIL_setMaxNumClients(1);
+
+    RIL_register(funcs, 0);
 
     RLOGD("RIL_Init RIL_register completed");
 
+    /*
     if (rilUimInit) {
         RLOGD("RIL_register_socket started");
-        RIL_register_socket(rilUimInit, RIL_SAP_SOCKET, argc, rilArgv);
+        RIL_register_socket(rilUimInit, RIL_SAP_SOCKET, argc, s_argv);
     }
 
     RLOGD("RIL_register_socket completed");
+    */
 
 done:
 
