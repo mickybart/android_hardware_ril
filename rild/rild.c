@@ -58,8 +58,6 @@ extern void RIL_register_socket (RIL_RadioFunctions *(*rilUimInit)
 extern void RIL_onRequestComplete(RIL_Token t, RIL_Errno e,
         void *response, size_t responselen);
 
-extern void RIL_onRequestAck(RIL_Token t);
-
 extern void RIL_setRilSocketName(char *);
 
 #if defined(ANDROID_MULTI_SIM)
@@ -79,7 +77,6 @@ static struct RIL_Env s_rilEnv = {
     RIL_onRequestComplete,
     RIL_onUnsolicitedResponse,
     RIL_requestTimedCallback,
-    RIL_onRequestAck
 };
 
 extern void RIL_startEventLoop();
