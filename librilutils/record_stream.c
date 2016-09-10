@@ -14,12 +14,14 @@
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
 */
+#define LOG_TAG "RIL_STREAM"
 
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
 #include <telephony/record_stream.h>
+#include <telephony/librilutils.h>
 #include <string.h>
 #include <stdint.h>
 #if defined(_WIN32)
@@ -82,7 +84,6 @@ static unsigned char * getEndOfRecord (unsigned char *p_begin,
 
     //First four bytes are length
     len = ntohl(*((uint32_t *)p_begin));
-
     p_ret = p_begin + HEADER_SIZE + len;
 
     if (p_end < p_ret) {
@@ -104,7 +105,7 @@ static void *getNextRecord (RecordStream *p_rs, size_t *p_outRecordLen)
         p_rs->unconsumed = record_end;
 
         *p_outRecordLen = record_end - record_start;
-
+        ril_hexDump("getNextRecord", record_start, *p_outRecordLen);
         return record_start;
     }
 
@@ -170,6 +171,10 @@ int record_stream_get_next (RecordStream *p_rs, void ** p_outRecord,
         *p_outRecord = NULL;
         return countRead;
     }
+#if RIL_HEX_DUMP
+    RLOGD("Read from stream %d bytes", (int)countRead);
+    ril_hexDump(NULL, p_rs->read_end, countRead);
+#endif
 
     p_rs->read_end += countRead;
 
