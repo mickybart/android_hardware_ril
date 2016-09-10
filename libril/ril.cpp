@@ -92,10 +92,10 @@ namespace android {
 #define PRINTBUF_SIZE 8096
 
 // Enable verbose logging
-#define VDBG 0
+#define VDBG 1
 
 // Enable RILC log
-#define RILC_LOG 0
+#define RILC_LOG 1
 
 #if RILC_LOG
     #define startRequest           sprintf(printBuf, "(")
@@ -494,6 +494,8 @@ processCommandBuffer(void *buffer, size_t buflen, RIL_SOCKET_ID socket_id) {
     status = p.readInt32(&request);
     status = p.readInt32 (&token);
 
+    RLOGD("processCommandBuffer, request = %s (%d), token = %d", requestToString(request), request, token);
+
 #if (SIM_COUNT >= 2)
     if (socket_id == RIL_SOCKET_2) {
         pendingRequestsMutexHook = &s_pendingRequestsMutex_socket2;
@@ -583,7 +585,7 @@ dispatchString (Parcel& p, RequestInfo *pRI) {
     printRequest(pRI->token, pRI->pCI->requestNumber);
 
     CALL_ONREQUEST(pRI->pCI->requestNumber, string8,
-                       sizeof(char *), pRI, pRI->socket_id);
+                       sizeof(string8), pRI, pRI->socket_id);
 
 #ifdef MEMSET_FREED
     memsetString(string8);
@@ -876,6 +878,7 @@ dispatchSIM_IO (Parcel &p, RequestInfo *pRI) {
     memset (&simIO, 0, sizeof(simIO));
 
     // note we only check status at the end
+    simIO.v6.reserved = 0;
 
     status = p.readInt32(&t);
     simIO.v6.command = (int)t;
@@ -2032,7 +2035,7 @@ static void dispatchRadioCapability(Parcel &p, RequestInfo *pRI){
 
     startRequest;
     appendPrintBuf("%s [version:%d, session:%d, phase:%d, rat:%d, \
-            logicalModemUuid:%s, status:%d", printBuf, rc.version, rc.session
+            logicalModemUuid:%s, status:%d", printBuf, rc.version, rc.session,
             rc.phase, rc.rat, rc.logicalModemUuid, rc.session);
 
     closeRequest;
@@ -3671,8 +3674,8 @@ static int responseLceData(Parcel &p, void *response, size_t responselen) {
   p.write((void *)&(p_cur->lce_suspended), 1);
 
   startResponse;
-  appendPrintBuf("LCE info received: capacity %d confidence level %d
-                  and suspended %d",
+  appendPrintBuf("LCE info received: capacity %d confidence level %d"
+                  " and suspended %d",
                   p_cur->last_hop_capacity_kbps, p_cur->confidence_level,
                   p_cur->lce_suspended);
   closeResponse;
@@ -3701,8 +3704,8 @@ static int responseActivityData(Parcel &p, void *response, size_t responselen) {
   p.writeInt32(p_cur->rx_mode_time_ms);
 
   startResponse;
-  appendPrintBuf("Modem activity info received: sleep_mode_time_ms %d idle_mode_time_ms %d
-                  tx_mode_time_ms %d %d %d %d %d and rx_mode_time_ms %d",
+  appendPrintBuf("Modem activity info received: sleep_mode_time_ms %d idle_mode_time_ms %d "
+                  "tx_mode_time_ms %d %d %d %d %d and rx_mode_time_ms %d",
                   p_cur->sleep_mode_time_ms, p_cur->idle_mode_time_ms, p_cur->tx_mode_time_ms[0],
                   p_cur->tx_mode_time_ms[1], p_cur->tx_mode_time_ms[2], p_cur->tx_mode_time_ms[3],
                   p_cur->tx_mode_time_ms[4], p_cur->rx_mode_time_ms);
@@ -3778,10 +3781,19 @@ static void processCommandsCallback(int fd, short flags, void *param) {
     size_t recordlen;
     int ret;
     SocketListenParam *p_info = (SocketListenParam *)param;
+    static int startBytesRead = 0;
+    char cbuf[5] = {};
 
     assert(fd == p_info->fdCommand);
 
     p_rs = p_info->p_rs;
+
+    if (!startBytesRead) {
+        //FIX for SUB1 string at the begging of stream
+        read (fd, cbuf, 4);
+        RLOGD("command stream start: %s", cbuf);
+        startBytesRead = 1;
+    }
 
     for (;;) {
         /* loop until EAGAIN/EINTR, end of stream, or other error */
