@@ -18,6 +18,7 @@
 #define LIBRILUTILS_H
 
 #include <stdint.h>
+#include <utils/Log.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,6 +31,16 @@ extern "C" {
  * return the same value as System.nanoTime in java.
  */
 uint64_t ril_nano_time();
+
+void __ril_hexDump(const char *logTag, char *desc, void *addr, int len);
+
+#define RIL_HEX_DUMP 1
+
+#if RIL_HEX_DUMP
+#define ril_hexDump(desc,addr,len) __ril_hexDump(LOG_TAG,desc,addr,len)
+#else
+#define ril_hexDump(desc,addr,len)
+#endif
 
 #ifdef __cplusplus
 }
