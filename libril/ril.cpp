@@ -99,10 +99,10 @@ namespace android {
 #define PRINTBUF_SIZE 8096
 
 // Enable verbose logging
-#define VDBG 0
+#define VDBG 1
 
 // Enable RILC log
-#define RILC_LOG 0
+#define RILC_LOG 1
 
 #if RILC_LOG
     #define startRequest           sprintf(printBuf, "(")
@@ -511,6 +511,8 @@ processCommandBuffer(void *buffer, size_t buflen, RIL_SOCKET_ID socket_id) {
     // status checked at end
     status = p.readInt32(&request);
     status = p.readInt32 (&token);
+
+    RLOGD("processCommandBuffer, request = %s (%d), token = %d", requestToString(request), request, token);
 
 #if (SIM_COUNT >= 2)
     if (socket_id == RIL_SOCKET_2) {
