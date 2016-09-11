@@ -4,13 +4,15 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
-	rild.c
+	rild.c \
+	ril-shim.c
 
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libcutils \
 	libril \
+	librilutils \
 	libdl
 
 # temporary hack for broken vendor rils
