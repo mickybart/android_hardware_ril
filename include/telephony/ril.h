@@ -583,6 +583,7 @@ typedef struct {
              * clir == 2 on "CLIR suppression" (allow CLI presentation)
              */
     RIL_UUS_Info *  uusInfo;    /* NULL or Pointer to User-User Signaling Information */
+    int reserved;               /* qcom's ril library Dial structure has extra 4 bytes */
 } RIL_Dial;
 
 typedef struct {
