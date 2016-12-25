@@ -283,6 +283,9 @@ static void dispatchSimAuthentication(Parcel &p, RequestInfo *pRI);
 static void dispatchDataProfile(Parcel &p, RequestInfo *pRI);
 static void dispatchRadioCapability(Parcel &p, RequestInfo *pRI);
 static void dispatchCarrierRestrictions(Parcel &p, RequestInfo *pRI);
+static void dispatchSetNetworkSelectionAutomatic(Parcel &p, RequestInfo *pRI);
+static void dispatchSetNetworkSelectionManual(Parcel &p, RequestInfo *pRI);
+
 static int responseInts(Parcel &p, void *response, size_t responselen);
 static int responseFailCause(Parcel &p, void *response, size_t responselen);
 static int responseStrings(Parcel &p, void *response, size_t responselen);
@@ -2236,6 +2239,52 @@ exit:
     if (excluded_carriers != NULL) {
         free(excluded_carriers);
     }
+    return;
+}
+
+static void
+dispatchSetNetworkSelectionAutomatic (Parcel& p, RequestInfo *pRI) {
+    status_t status;
+    size_t datalen;
+    size_t stringlen;
+    int data[2];
+
+    datalen = sizeof(int) * 2;
+    data[0] = 0;
+    data[1] = -1;
+
+    startRequest;
+    appendPrintBuf("%s[%d,%d]", printBuf, data[0], data[1]);
+    closeRequest;
+    printRequest(pRI->token, pRI->pCI->requestNumber);
+
+    CALL_ONREQUEST(pRI->pCI->requestNumber, data,
+                       datalen, pRI, pRI->socket_id);
+    return;
+}
+
+static void
+dispatchSetNetworkSelectionManual (Parcel& p, RequestInfo *pRI) {
+    status_t status;
+    size_t datalen;
+    size_t stringlen;
+    char *strings[2];
+
+    datalen = sizeof(char *) * 2;
+    strings[0] = strdupReadString(p);
+    strings[1] = (char *)(-1);
+
+    startRequest;
+    appendPrintBuf("%s%s", printBuf, strings[0]);
+    closeRequest;
+    printRequest(pRI->token, pRI->pCI->requestNumber);
+
+    CALL_ONREQUEST(pRI->pCI->requestNumber, strings,
+                       datalen, pRI, pRI->socket_id);
+#ifdef MEMSET_FREED
+    memsetString(strings[0]);
+#endif
+    free(strings[0]);
     return;
 }
 
