@@ -527,6 +527,16 @@ hidl_string convertCharPtrToHidlString(const char *ptr) {
     return ret;
 }
 
+bool dispatchUnsupported(int serial, int slotId, int request) {
+    RLOGE("Unsupported: %s", requestToString(request));
+    RequestInfo *pRI = android::addRequestToList(serial, slotId, request);
+    if (pRI == NULL) {
+        return false;
+    }
+    sendErrorResponse(pRI, RIL_E_REQUEST_NOT_SUPPORTED);
+    return true;
+}
+
 bool dispatchVoid(int serial, int slotId, int request) {
     RequestInfo *pRI = android::addRequestToList(serial, slotId, request);
     if (pRI == NULL) {
@@ -1325,7 +1335,7 @@ Return<void> RadioImpl::setNetworkSelectionModeAutomatic(int32_t serial) {
 #if VDBG
     RLOGD("setNetworkSelectionModeAutomatic: serial %d", serial);
 #endif
-    dispatchVoid(serial, mSlotId, RIL_REQUEST_SET_NETWORK_SELECTION_AUTOMATIC);
+    dispatchInts(serial, mSlotId, RIL_REQUEST_SET_NETWORK_SELECTION_AUTOMATIC, 2, 0, -1);
     return Void();
 }
 
@@ -1334,8 +1344,8 @@ Return<void> RadioImpl::setNetworkSelectionModeManual(int32_t serial,
 #if VDBG
     RLOGD("setNetworkSelectionModeManual: serial %d", serial);
 #endif
-    dispatchString(serial, mSlotId, RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL,
-            operatorNumeric.c_str());
+    dispatchStrings(serial, mSlotId, RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL, 2,
+            operatorNumeric.c_str(), (char *)(-1));
     return Void();
 }
 
@@ -1981,7 +1991,7 @@ Return<void> RadioImpl::getCellInfoList(int32_t serial) {
 #if VDBG
     RLOGD("getCellInfoList: serial %d", serial);
 #endif
-    dispatchVoid(serial, mSlotId, RIL_REQUEST_GET_CELL_INFO_LIST);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_GET_CELL_INFO_LIST);
     return Void();
 }
 
@@ -1989,7 +1999,7 @@ Return<void> RadioImpl::setCellInfoListRate(int32_t serial, int32_t rate) {
 #if VDBG
     RLOGD("setCellInfoListRate: serial %d", serial);
 #endif
-    dispatchInts(serial, mSlotId, RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE, 1, rate);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SET_UNSOL_CELL_INFO_LIST_RATE);
     return Void();
 }
 
@@ -1998,109 +2008,7 @@ Return<void> RadioImpl::setInitialAttachApn(int32_t serial, const DataProfileInf
 #if VDBG
     RLOGD("setInitialAttachApn: serial %d", serial);
 #endif
-    RequestInfo *pRI = android::addRequestToList(serial, mSlotId,
-            RIL_REQUEST_SET_INITIAL_ATTACH_APN);
-    if (pRI == NULL) {
-        return Void();
-    }
-
-    if (s_vendorFunctions->version <= 14) {
-        RIL_InitialAttachApn iaa = {};
-
-        if (dataProfileInfo.apn.size() == 0) {
-            iaa.apn = (char *) calloc(1, sizeof(char));
-            if (iaa.apn == NULL) {
-                RLOGE("Memory allocation failed for request %s",
-                        requestToString(pRI->pCI->requestNumber));
-                sendErrorResponse(pRI, RIL_E_NO_MEMORY);
-                return Void();
-            }
-            iaa.apn[0] = '\0';
-        } else {
-            if (!copyHidlStringToRil(&iaa.apn, dataProfileInfo.apn, pRI)) {
-                return Void();
-            }
-        }
-
-        const hidl_string &protocol =
-                (isRoaming ? dataProfileInfo.roamingProtocol : dataProfileInfo.protocol);
-
-        if (!copyHidlStringToRil(&iaa.protocol, protocol, pRI)) {
-            memsetAndFreeStrings(1, iaa.apn);
-            return Void();
-        }
-        iaa.authtype = (int) dataProfileInfo.authType;
-        if (!copyHidlStringToRil(&iaa.username, dataProfileInfo.user, pRI)) {
-            memsetAndFreeStrings(2, iaa.apn, iaa.protocol);
-            return Void();
-        }
-        if (!copyHidlStringToRil(&iaa.password, dataProfileInfo.password, pRI)) {
-            memsetAndFreeStrings(3, iaa.apn, iaa.protocol, iaa.username);
-            return Void();
-        }
-
-        CALL_ONREQUEST(RIL_REQUEST_SET_INITIAL_ATTACH_APN, &iaa, sizeof(iaa), pRI, mSlotId);
-
-        memsetAndFreeStrings(4, iaa.apn, iaa.protocol, iaa.username, iaa.password);
-    } else {
-        RIL_InitialAttachApn_v15 iaa = {};
-
-        if (dataProfileInfo.apn.size() == 0) {
-            iaa.apn = (char *) calloc(1, sizeof(char));
-            if (iaa.apn == NULL) {
-                RLOGE("Memory allocation failed for request %s",
-                        requestToString(pRI->pCI->requestNumber));
-                sendErrorResponse(pRI, RIL_E_NO_MEMORY);
-                return Void();
-            }
-            iaa.apn[0] = '\0';
-        } else {
-            if (!copyHidlStringToRil(&iaa.apn, dataProfileInfo.apn, pRI)) {
-                return Void();
-            }
-        }
-
-        if (!copyHidlStringToRil(&iaa.protocol, dataProfileInfo.protocol, pRI)) {
-            memsetAndFreeStrings(1, iaa.apn);
-            return Void();
-        }
-        if (!copyHidlStringToRil(&iaa.roamingProtocol, dataProfileInfo.roamingProtocol, pRI)) {
-            memsetAndFreeStrings(2, iaa.apn, iaa.protocol);
-            return Void();
-        }
-        iaa.authtype = (int) dataProfileInfo.authType;
-        if (!copyHidlStringToRil(&iaa.username, dataProfileInfo.user, pRI)) {
-            memsetAndFreeStrings(3, iaa.apn, iaa.protocol, iaa.roamingProtocol);
-            return Void();
-        }
-        if (!copyHidlStringToRil(&iaa.password, dataProfileInfo.password, pRI)) {
-            memsetAndFreeStrings(4, iaa.apn, iaa.protocol, iaa.roamingProtocol, iaa.username);
-            return Void();
-        }
-        iaa.supportedTypesBitmask = dataProfileInfo.supportedApnTypesBitmap;
-        iaa.bearerBitmask = dataProfileInfo.bearerBitmap;
-        iaa.modemCognitive = BOOL_TO_INT(modemCognitive);
-        iaa.mtu = dataProfileInfo.mtu;
-
-        if (!convertMvnoTypeToString(dataProfileInfo.mvnoType, iaa.mvnoType)) {
-            sendErrorResponse(pRI, RIL_E_INVALID_ARGUMENTS);
-            memsetAndFreeStrings(5, iaa.apn, iaa.protocol, iaa.roamingProtocol, iaa.username,
-                    iaa.password);
-            return Void();
-        }
-
-        if (!copyHidlStringToRil(&iaa.mvnoMatchData, dataProfileInfo.mvnoMatchData, pRI)) {
-            memsetAndFreeStrings(5, iaa.apn, iaa.protocol, iaa.roamingProtocol, iaa.username,
-                    iaa.password);
-            return Void();
-        }
-
-        CALL_ONREQUEST(RIL_REQUEST_SET_INITIAL_ATTACH_APN, &iaa, sizeof(iaa), pRI, mSlotId);
-
-        memsetAndFreeStrings(6, iaa.apn, iaa.protocol, iaa.roamingProtocol, iaa.username,
-                iaa.password, iaa.mvnoMatchData);
-    }
-
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SET_INITIAL_ATTACH_APN);
     return Void();
 }
 
@@ -2108,7 +2016,7 @@ Return<void> RadioImpl::getImsRegistrationState(int32_t serial) {
 #if VDBG
     RLOGD("getImsRegistrationState: serial %d", serial);
 #endif
-    dispatchVoid(serial, mSlotId, RIL_REQUEST_IMS_REGISTRATION_STATE);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_IMS_REGISTRATION_STATE);
     return Void();
 }
 
@@ -2205,22 +2113,7 @@ Return<void> RadioImpl::sendImsSms(int32_t serial, const ImsSmsMessage& message)
 #if VDBG
     RLOGD("sendImsSms: serial %d", serial);
 #endif
-    RequestInfo *pRI = android::addRequestToList(serial, mSlotId, RIL_REQUEST_IMS_SEND_SMS);
-    if (pRI == NULL) {
-        return Void();
-    }
-
-    RIL_RadioTechnologyFamily format = (RIL_RadioTechnologyFamily) message.tech;
-
-    if (RADIO_TECH_3GPP == format) {
-        dispatchImsGsmSms(message, pRI);
-    } else if (RADIO_TECH_3GPP2 == format) {
-        dispatchImsCdmaSms(message, pRI);
-    } else {
-        RLOGE("sendImsSms: Invalid radio tech %s",
-                requestToString(pRI->pCI->requestNumber));
-        sendErrorResponse(pRI, RIL_E_INVALID_ARGUMENTS);
-    }
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_IMS_SEND_SMS);
     return Void();
 }
 
@@ -2228,7 +2121,7 @@ Return<void> RadioImpl::iccTransmitApduBasicChannel(int32_t serial, const SimApd
 #if VDBG
     RLOGD("iccTransmitApduBasicChannel: serial %d", serial);
 #endif
-    dispatchIccApdu(serial, mSlotId, RIL_REQUEST_SIM_TRANSMIT_APDU_BASIC, message);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SIM_TRANSMIT_APDU_BASIC);
     return Void();
 }
 
@@ -2236,26 +2129,7 @@ Return<void> RadioImpl::iccOpenLogicalChannel(int32_t serial, const hidl_string&
 #if VDBG
     RLOGD("iccOpenLogicalChannel: serial %d", serial);
 #endif
-    if (s_vendorFunctions->version < 15) {
-        dispatchString(serial, mSlotId, RIL_REQUEST_SIM_OPEN_CHANNEL, aid.c_str());
-    } else {
-        RequestInfo *pRI = android::addRequestToList(serial, mSlotId, RIL_REQUEST_SIM_OPEN_CHANNEL);
-        if (pRI == NULL) {
-            return Void();
-        }
-
-        RIL_OpenChannelParams params = {};
-
-        params.p2 = p2;
-
-        if (!copyHidlStringToRil(&params.aidPtr, aid, pRI)) {
-            return Void();
-        }
-
-        CALL_ONREQUEST(pRI->pCI->requestNumber, &params, sizeof(params), pRI, mSlotId);
-
-        memsetAndFreeStrings(1, params.aidPtr);
-    }
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SIM_OPEN_CHANNEL);
     return Void();
 }
 
@@ -2263,7 +2137,7 @@ Return<void> RadioImpl::iccCloseLogicalChannel(int32_t serial, int32_t channelId
 #if VDBG
     RLOGD("iccCloseLogicalChannel: serial %d", serial);
 #endif
-    dispatchInts(serial, mSlotId, RIL_REQUEST_SIM_CLOSE_CHANNEL, 1, channelId);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SIM_CLOSE_CHANNEL);
     return Void();
 }
 
@@ -2271,7 +2145,7 @@ Return<void> RadioImpl::iccTransmitApduLogicalChannel(int32_t serial, const SimA
 #if VDBG
     RLOGD("iccTransmitApduLogicalChannel: serial %d", serial);
 #endif
-    dispatchIccApdu(serial, mSlotId, RIL_REQUEST_SIM_TRANSMIT_APDU_CHANNEL, message);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SIM_TRANSMIT_APDU_CHANNEL);
     return Void();
 }
 
@@ -2279,15 +2153,7 @@ Return<void> RadioImpl::nvReadItem(int32_t serial, NvItem itemId) {
 #if VDBG
     RLOGD("nvReadItem: serial %d", serial);
 #endif
-    RequestInfo *pRI = android::addRequestToList(serial, mSlotId, RIL_REQUEST_NV_READ_ITEM);
-    if (pRI == NULL) {
-        return Void();
-    }
-
-    RIL_NV_ReadItem nvri = {};
-    nvri.itemID = (RIL_NV_Item) itemId;
-
-    CALL_ONREQUEST(pRI->pCI->requestNumber, &nvri, sizeof(nvri), pRI, mSlotId);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_NV_READ_ITEM);
     return Void();
 }
 
@@ -2295,22 +2161,7 @@ Return<void> RadioImpl::nvWriteItem(int32_t serial, const NvWriteItem& item) {
 #if VDBG
     RLOGD("nvWriteItem: serial %d", serial);
 #endif
-    RequestInfo *pRI = android::addRequestToList(serial, mSlotId, RIL_REQUEST_NV_WRITE_ITEM);
-    if (pRI == NULL) {
-        return Void();
-    }
-
-    RIL_NV_WriteItem nvwi = {};
-
-    nvwi.itemID = (RIL_NV_Item) item.itemId;
-
-    if (!copyHidlStringToRil(&nvwi.value, item.value, pRI)) {
-        return Void();
-    }
-
-    CALL_ONREQUEST(pRI->pCI->requestNumber, &nvwi, sizeof(nvwi), pRI, mSlotId);
-
-    memsetAndFreeStrings(1, nvwi.value);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_NV_WRITE_ITEM);
     return Void();
 }
 
@@ -2318,33 +2169,15 @@ Return<void> RadioImpl::nvWriteCdmaPrl(int32_t serial, const hidl_vec<uint8_t>& 
 #if VDBG
     RLOGD("nvWriteCdmaPrl: serial %d", serial);
 #endif
-    dispatchRaw(serial, mSlotId, RIL_REQUEST_NV_WRITE_CDMA_PRL, prl);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_NV_WRITE_CDMA_PRL);
     return Void();
 }
 
 Return<void> RadioImpl::nvResetConfig(int32_t serial, ResetNvType resetType) {
-    int rilResetType = -1;
 #if VDBG
     RLOGD("nvResetConfig: serial %d", serial);
 #endif
-    /* Convert ResetNvType to RIL.h values
-     * RIL_REQUEST_NV_RESET_CONFIG
-     * 1 - reload all NV items
-     * 2 - erase NV reset (SCRTN)
-     * 3 - factory reset (RTN)
-     */
-    switch(resetType) {
-      case ResetNvType::RELOAD:
-        rilResetType = 1;
-        break;
-      case ResetNvType::ERASE:
-        rilResetType = 2;
-        break;
-      case ResetNvType::FACTORY_RESET:
-        rilResetType = 3;
-        break;
-    }
-    dispatchInts(serial, mSlotId, RIL_REQUEST_NV_RESET_CONFIG, 1, rilResetType);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_NV_RESET_CONFIG);
     return Void();
 }
 
@@ -2352,20 +2185,7 @@ Return<void> RadioImpl::setUiccSubscription(int32_t serial, const SelectUiccSub&
 #if VDBG
     RLOGD("setUiccSubscription: serial %d", serial);
 #endif
-    RequestInfo *pRI = android::addRequestToList(serial, mSlotId,
-            RIL_REQUEST_SET_UICC_SUBSCRIPTION);
-    if (pRI == NULL) {
-        return Void();
-    }
-
-    RIL_SelectUiccSub rilUiccSub = {};
-
-    rilUiccSub.slot = uiccSub.slot;
-    rilUiccSub.app_index = uiccSub.appIndex;
-    rilUiccSub.sub_type = (RIL_SubscriptionType) uiccSub.subType;
-    rilUiccSub.act_status = (RIL_UiccSubActStatus) uiccSub.actStatus;
-
-    CALL_ONREQUEST(pRI->pCI->requestNumber, &rilUiccSub, sizeof(rilUiccSub), pRI, mSlotId);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SET_UICC_SUBSCRIPTION);
     return Void();
 }
 
@@ -2373,7 +2193,7 @@ Return<void> RadioImpl::setDataAllowed(int32_t serial, bool allow) {
 #if VDBG
     RLOGD("setDataAllowed: serial %d", serial);
 #endif
-    dispatchInts(serial, mSlotId, RIL_REQUEST_ALLOW_DATA, 1, BOOL_TO_INT(allow));
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_ALLOW_DATA);
     return Void();
 }
 
@@ -2381,7 +2201,7 @@ Return<void> RadioImpl::getHardwareConfig(int32_t serial) {
 #if VDBG
     RLOGD("getHardwareConfig: serial %d", serial);
 #endif
-    dispatchVoid(serial, mSlotId, RIL_REQUEST_GET_HARDWARE_CONFIG);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_GET_HARDWARE_CONFIG);
     return Void();
 }
 
@@ -2390,27 +2210,7 @@ Return<void> RadioImpl::requestIccSimAuthentication(int32_t serial, int32_t auth
 #if VDBG
     RLOGD("requestIccSimAuthentication: serial %d", serial);
 #endif
-    RequestInfo *pRI = android::addRequestToList(serial, mSlotId, RIL_REQUEST_SIM_AUTHENTICATION);
-    if (pRI == NULL) {
-        return Void();
-    }
-
-    RIL_SimAuthentication pf = {};
-
-    pf.authContext = authContext;
-
-    if (!copyHidlStringToRil(&pf.authData, authData, pRI)) {
-        return Void();
-    }
-
-    if (!copyHidlStringToRil(&pf.aid, aid, pRI)) {
-        memsetAndFreeStrings(1, pf.authData);
-        return Void();
-    }
-
-    CALL_ONREQUEST(pRI->pCI->requestNumber, &pf, sizeof(pf), pRI, mSlotId);
-
-    memsetAndFreeStrings(2, pf.authData, pf.aid);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SIM_AUTHENTICATION);
     return Void();
 }
 
@@ -2453,158 +2253,7 @@ Return<void> RadioImpl::setDataProfile(int32_t serial, const hidl_vec<DataProfil
 #if VDBG
     RLOGD("setDataProfile: serial %d", serial);
 #endif
-    RequestInfo *pRI = android::addRequestToList(serial, mSlotId, RIL_REQUEST_SET_DATA_PROFILE);
-    if (pRI == NULL) {
-        return Void();
-    }
-
-    size_t num = profiles.size();
-    bool success = false;
-
-    if (s_vendorFunctions->version <= 14) {
-
-        RIL_DataProfileInfo *dataProfiles =
-            (RIL_DataProfileInfo *) calloc(num, sizeof(RIL_DataProfileInfo));
-
-        if (dataProfiles == NULL) {
-            RLOGE("Memory allocation failed for request %s",
-                    requestToString(pRI->pCI->requestNumber));
-            sendErrorResponse(pRI, RIL_E_NO_MEMORY);
-            return Void();
-        }
-
-        RIL_DataProfileInfo **dataProfilePtrs =
-            (RIL_DataProfileInfo **) calloc(num, sizeof(RIL_DataProfileInfo *));
-        if (dataProfilePtrs == NULL) {
-            RLOGE("Memory allocation failed for request %s",
-                    requestToString(pRI->pCI->requestNumber));
-            free(dataProfiles);
-            sendErrorResponse(pRI, RIL_E_NO_MEMORY);
-            return Void();
-        }
-
-        for (size_t i = 0; i < num; i++) {
-            dataProfilePtrs[i] = &dataProfiles[i];
-
-            success = copyHidlStringToRil(&dataProfiles[i].apn, profiles[i].apn, pRI);
-
-            const hidl_string &protocol =
-                    (isRoaming ? profiles[i].roamingProtocol : profiles[i].protocol);
-
-            if (success && !copyHidlStringToRil(&dataProfiles[i].protocol, protocol, pRI)) {
-                success = false;
-            }
-
-            if (success && !copyHidlStringToRil(&dataProfiles[i].user, profiles[i].user, pRI)) {
-                success = false;
-            }
-            if (success && !copyHidlStringToRil(&dataProfiles[i].password, profiles[i].password,
-                    pRI)) {
-                success = false;
-            }
-
-            if (!success) {
-                freeSetDataProfileData(num, dataProfiles, dataProfilePtrs, 4,
-                    &RIL_DataProfileInfo::apn, &RIL_DataProfileInfo::protocol,
-                    &RIL_DataProfileInfo::user, &RIL_DataProfileInfo::password);
-                return Void();
-            }
-
-            dataProfiles[i].profileId = (RIL_DataProfile) profiles[i].profileId;
-            dataProfiles[i].authType = (int) profiles[i].authType;
-            dataProfiles[i].type = (int) profiles[i].type;
-            dataProfiles[i].maxConnsTime = profiles[i].maxConnsTime;
-            dataProfiles[i].maxConns = profiles[i].maxConns;
-            dataProfiles[i].waitTime = profiles[i].waitTime;
-            dataProfiles[i].enabled = BOOL_TO_INT(profiles[i].enabled);
-        }
-
-        CALL_ONREQUEST(RIL_REQUEST_SET_DATA_PROFILE, dataProfilePtrs,
-                num * sizeof(RIL_DataProfileInfo *), pRI, mSlotId);
-
-        freeSetDataProfileData(num, dataProfiles, dataProfilePtrs, 4,
-                &RIL_DataProfileInfo::apn, &RIL_DataProfileInfo::protocol,
-                &RIL_DataProfileInfo::user, &RIL_DataProfileInfo::password);
-    } else {
-        RIL_DataProfileInfo_v15 *dataProfiles =
-            (RIL_DataProfileInfo_v15 *) calloc(num, sizeof(RIL_DataProfileInfo_v15));
-
-        if (dataProfiles == NULL) {
-            RLOGE("Memory allocation failed for request %s",
-                    requestToString(pRI->pCI->requestNumber));
-            sendErrorResponse(pRI, RIL_E_NO_MEMORY);
-            return Void();
-        }
-
-        RIL_DataProfileInfo_v15 **dataProfilePtrs =
-            (RIL_DataProfileInfo_v15 **) calloc(num, sizeof(RIL_DataProfileInfo_v15 *));
-        if (dataProfilePtrs == NULL) {
-            RLOGE("Memory allocation failed for request %s",
-                    requestToString(pRI->pCI->requestNumber));
-            free(dataProfiles);
-            sendErrorResponse(pRI, RIL_E_NO_MEMORY);
-            return Void();
-        }
-
-        for (size_t i = 0; i < num; i++) {
-            dataProfilePtrs[i] = &dataProfiles[i];
-
-            success = copyHidlStringToRil(&dataProfiles[i].apn, profiles[i].apn, pRI);
-            if (success && !copyHidlStringToRil(&dataProfiles[i].protocol, profiles[i].protocol,
-                    pRI)) {
-                success = false;
-            }
-            if (success && !copyHidlStringToRil(&dataProfiles[i].roamingProtocol,
-                    profiles[i].roamingProtocol, pRI)) {
-                success = false;
-            }
-            if (success && !copyHidlStringToRil(&dataProfiles[i].user, profiles[i].user, pRI)) {
-                success = false;
-            }
-            if (success && !copyHidlStringToRil(&dataProfiles[i].password, profiles[i].password,
-                    pRI)) {
-                success = false;
-            }
-            if (success && !copyHidlStringToRil(&dataProfiles[i].mvnoMatchData,
-                    profiles[i].mvnoMatchData, pRI)) {
-                success = false;
-            }
-
-            if (success && !convertMvnoTypeToString(profiles[i].mvnoType,
-                    dataProfiles[i].mvnoType)) {
-                sendErrorResponse(pRI, RIL_E_INVALID_ARGUMENTS);
-                success = false;
-            }
-
-            if (!success) {
-                freeSetDataProfileData(num, dataProfiles, dataProfilePtrs, 6,
-                    &RIL_DataProfileInfo_v15::apn, &RIL_DataProfileInfo_v15::protocol,
-                    &RIL_DataProfileInfo_v15::roamingProtocol, &RIL_DataProfileInfo_v15::user,
-                    &RIL_DataProfileInfo_v15::password, &RIL_DataProfileInfo_v15::mvnoMatchData);
-                return Void();
-            }
-
-            dataProfiles[i].profileId = (RIL_DataProfile) profiles[i].profileId;
-            dataProfiles[i].authType = (int) profiles[i].authType;
-            dataProfiles[i].type = (int) profiles[i].type;
-            dataProfiles[i].maxConnsTime = profiles[i].maxConnsTime;
-            dataProfiles[i].maxConns = profiles[i].maxConns;
-            dataProfiles[i].waitTime = profiles[i].waitTime;
-            dataProfiles[i].enabled = BOOL_TO_INT(profiles[i].enabled);
-            dataProfiles[i].supportedTypesBitmask = profiles[i].supportedApnTypesBitmap;
-            dataProfiles[i].bearerBitmask = profiles[i].bearerBitmap;
-            dataProfiles[i].mtu = profiles[i].mtu;
-        }
-
-        CALL_ONREQUEST(RIL_REQUEST_SET_DATA_PROFILE, dataProfilePtrs,
-                num * sizeof(RIL_DataProfileInfo_v15 *), pRI, mSlotId);
-
-        freeSetDataProfileData(num, dataProfiles, dataProfilePtrs, 6,
-                &RIL_DataProfileInfo_v15::apn, &RIL_DataProfileInfo_v15::protocol,
-                &RIL_DataProfileInfo_v15::roamingProtocol, &RIL_DataProfileInfo_v15::user,
-                &RIL_DataProfileInfo_v15::password, &RIL_DataProfileInfo_v15::mvnoMatchData);
-    }
-
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SET_DATA_PROFILE);
     return Void();
 }
 
@@ -2612,7 +2261,7 @@ Return<void> RadioImpl::requestShutdown(int32_t serial) {
 #if VDBG
     RLOGD("requestShutdown: serial %d", serial);
 #endif
-    dispatchVoid(serial, mSlotId, RIL_REQUEST_SHUTDOWN);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SHUTDOWN);
     return Void();
 }
 
@@ -2620,7 +2269,7 @@ Return<void> RadioImpl::getRadioCapability(int32_t serial) {
 #if VDBG
     RLOGD("getRadioCapability: serial %d", serial);
 #endif
-    dispatchVoid(serial, mSlotId, RIL_REQUEST_GET_RADIO_CAPABILITY);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_GET_RADIO_CAPABILITY);
     return Void();
 }
 
@@ -2628,22 +2277,7 @@ Return<void> RadioImpl::setRadioCapability(int32_t serial, const RadioCapability
 #if VDBG
     RLOGD("setRadioCapability: serial %d", serial);
 #endif
-    RequestInfo *pRI = android::addRequestToList(serial, mSlotId, RIL_REQUEST_SET_RADIO_CAPABILITY);
-    if (pRI == NULL) {
-        return Void();
-    }
-
-    RIL_RadioCapability rilRc = {};
-
-    // TODO : set rilRc.version using HIDL version ?
-    rilRc.session = rc.session;
-    rilRc.phase = (int) rc.phase;
-    rilRc.rat = (int) rc.raf;
-    rilRc.status = (int) rc.status;
-    strncpy(rilRc.logicalModemUuid, rc.logicalModemUuid.c_str(), MAX_UUID_LENGTH);
-
-    CALL_ONREQUEST(pRI->pCI->requestNumber, &rilRc, sizeof(rilRc), pRI, mSlotId);
-
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_SET_RADIO_CAPABILITY);
     return Void();
 }
 
@@ -2651,8 +2285,7 @@ Return<void> RadioImpl::startLceService(int32_t serial, int32_t reportInterval, 
 #if VDBG
     RLOGD("startLceService: serial %d", serial);
 #endif
-    dispatchInts(serial, mSlotId, RIL_REQUEST_START_LCE, 2, reportInterval,
-            BOOL_TO_INT(pullMode));
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_START_LCE);
     return Void();
 }
 
@@ -2660,7 +2293,7 @@ Return<void> RadioImpl::stopLceService(int32_t serial) {
 #if VDBG
     RLOGD("stopLceService: serial %d", serial);
 #endif
-    dispatchVoid(serial, mSlotId, RIL_REQUEST_STOP_LCE);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_STOP_LCE);
     return Void();
 }
 
@@ -2668,7 +2301,7 @@ Return<void> RadioImpl::pullLceData(int32_t serial) {
 #if VDBG
     RLOGD("pullLceData: serial %d", serial);
 #endif
-    dispatchVoid(serial, mSlotId, RIL_REQUEST_PULL_LCEDATA);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_PULL_LCEDATA);
     return Void();
 }
 
@@ -2676,7 +2309,7 @@ Return<void> RadioImpl::getModemActivityInfo(int32_t serial) {
 #if VDBG
     RLOGD("getModemActivityInfo: serial %d", serial);
 #endif
-    dispatchVoid(serial, mSlotId, RIL_REQUEST_GET_ACTIVITY_INFO);
+    dispatchUnsupported(serial, mSlotId, RIL_REQUEST_GET_ACTIVITY_INFO);
     return Void();
 }
 
